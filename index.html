@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Custom Heardle</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --text-color: #ffffff;
+            --primary: #1db954;
+            --border: #333333;
+            --wrong: #e22134;
+            --empty: #282828;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        #game-container {
+            width: 100%;
+            max-width: 480px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        /* Header & Toggle */
+        #header-bar {
+            display: flex;
+            justify-content: flex-start;
+            margin-bottom: 15px;
+        }
+
+        #mode-toggle {
+            background-color: transparent;
+            color: #aaaaaa;
+            border: 1px solid var(--border);
+            padding: 6px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        #mode-toggle:hover {
+            color: white;
+            border-color: #666;
+        }
+
+        /* Top Bar: Play & Progress */
+        #top-bar {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        #play-btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            font-size: 20px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        #progress-container {
+            flex-grow: 1;
+            height: 12px;
+            background-color: var(--empty);
+            position: relative;
+            border-radius: 6px;
+        }
+
+        #progress-bar {
+            height: 100%;
+            background-color: var(--primary);
+            width: 0%;
+            border-radius: 6px;
+            transition: width 0.1s linear;
+        }
+
+        .marker {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background-color: var(--bg-color);
+        }
+
+        /* Guesses Grid */
+        #guesses-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-grow: 1;
+        }
+
+        .guess-box {
+            border: 1px solid var(--border);
+            height: 45px;
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            font-size: 14px;
+            background-color: var(--empty);
+            border-radius: 4px;
+        }
+
+        /* Input Area */
+        #input-container {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        #guess-input {
+            flex-grow: 1;
+            padding: 12px;
+            background-color: var(--empty);
+            border: 1px solid var(--border);
+            color: white;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+
+        #send-btn, #skip-btn {
+            background-color: var(--border);
+            color: white;
+            border: none;
+            padding: 0 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        #send-btn { background-color: var(--primary); }
+
+        /* Autocomplete List */
+        #autocomplete-list {
+            position: absolute;
+            bottom: 100%; 
+            left: 0;
+            right: 0;
+            background-color: var(--empty);
+            border: 1px solid var(--border);
+            max-height: 200px;
+            overflow-y: auto;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            z-index: 10;
+            display: none;
+            border-radius: 4px;
+        }
+
+        #autocomplete-list li {
+            padding: 12px 15px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+        }
+
+        #autocomplete-list li:hover { background-color: var(--border); }
+
+        /* Modals */
+        .modal {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.9);
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .modal h2 { margin-bottom: 10px; }
+        .modal button {
+            margin: 10px;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            background: var(--primary);
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .stats-text { font-size: 18px; margin: 5px 0; }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="header-bar">
+            <button id="mode-toggle">Search: First Word</button>
+        </div>
+
+        <div id="top-bar">
+            <button id="play-btn">▶</button>
+            <div id="progress-container">
+                <div id="progress-bar"></div>
+                <div id="markers"></div>
+            </div>
+        </div>
+
+        <div id="guesses-grid">
+            <div class="guess-box" id="guess-0"></div>
+            <div class="guess-box" id="guess-1"></div>
+            <div class="guess-box" id="guess-2"></div>
+            <div class="guess-box" id="guess-3"></div>
+            <div class="guess-box" id="guess-4"></div>
+            <div class="guess-box" id="guess-5"></div>
+        </div>
+
+        <div id="input-container">
+            <ul id="autocomplete-list"></ul>
+            <div class="input-row">
+                <input type="text" id="guess-input" placeholder="Guess a song..." autocomplete="off">
+                <button id="send-btn">➤</button>
+            </div>
+            <button id="skip-btn">Skip</button>
+        </div>
+
+        <div id="end-modal" class="modal">
+            <h2 id="end-title">You Won!</h2>
+            <p id="end-song-name">Song Name</p>
+            <div>
+                <button id="next-btn">Next Song</button>
+                <button id="exit-btn">Exit & Stats</button>
+            </div>
+        </div>
+
+        <div id="stats-modal" class="modal">
+            <h2>Your Statistics</h2>
+            <p class="stats-text">Played: <span id="stat-played">0</span></p>
+            <p class="stats-text">Won: <span id="stat-won">0</span></p>
+            <p class="stats-text">Win %: <span id="stat-percent">0</span>%</p>
+            <button onclick="location.reload()">Restart Game</button>
+        </div>
+    </div>
+
+    <script>
+        // --- TWEAKABLE SETTINGS ---
+        const songLibrary = [
+    { title: "Alphys", file: "Toby Fox - Alphys.mp3" },
+    { title: "Amalgam", file: "Toby Fox - Amalgam.mp3" },
+    { title: "An Ending", file: "Toby Fox - An Ending.mp3" },
+    { title: "Another Medium", file: "Toby Fox - Another Medium.mp3" },
+    { title: "Anticipation", file: "Toby Fox - Anticipation.mp3" },
+    { title: "Asgore", file: "Toby Fox - ASGORE.mp3" },
+    { title: "Barrier", file: "Toby Fox - Barrier.mp3" },
+    { title: "Battle Against A True Hero", file: "Toby Fox - Battle Against A True Hero.mp3" },
+    { title: "Bergentrückung", file: "Toby Fox - Bergentrückung.mp3" },
+    { title: "Bird That Carries You Over A Disproportionately Small Gap", file: "Toby Fox - Bird That Carries You Over A Disproportionately Small Gap.mp3" },
+    { title: "Bonetrousle", file: "Toby Fox - Bonetrousle.mp3" },
+    { title: "Bring It In, Guys!", file: "Toby Fox - Bring It In, Guys!.mp3" },
+    { title: "Burn In Despair!", file: "Toby Fox - Burn In Despair!.mp3" },
+    { title: "But The Earth Refused To Die", file: "Toby Fox - But The Earth Refused To Die.mp3" },
+    { title: "Can You Really Call This A Hotel, I Didn'T Receive A Mint On My Pillow Or Anything", file: "Toby Fox - Can You Really Call This A Hotel, I Didn't Receive A Mint On My Pillow Or Anything.mp3" },
+    { title: "Chill", file: "Toby Fox - Chill.mp3" },
+    { title: "Confession", file: "Toby Fox - Confession.mp3" },
+    { title: "Core Approach", file: "Toby Fox - CORE Approach.mp3" },
+    { title: "Core", file: "Toby Fox - CORE.mp3" },
+    { title: "Danger Mystery", file: "Toby Fox - Danger Mystery.mp3" },
+    { title: "Dating Fight!", file: "Toby Fox - Dating Fight!.mp3" },
+    { title: "Dating Start!", file: "Toby Fox - Dating Start!.mp3" },
+    { title: "Dating Tense!", file: "Toby Fox - Dating Tense!.mp3" },
+    { title: "Death By Glamour", file: "Toby Fox - Death By Glamour.mp3" },
+    { title: "Death Report", file: "Toby Fox - Death Report.mp3" },
+    { title: "Determination", file: "Toby Fox - Determination.mp3" },
+    { title: "Dogbass", file: "Toby Fox - Dogbass.mp3" },
+    { title: "Dogsong", file: "Toby Fox - Dogsong.mp3" },
+    { title: "Don't Give Up", file: "Toby Fox - Don't Give Up.mp3" },
+    { title: "Dummy!", file: "Toby Fox - Dummy!.mp3" },
+    { title: "Enemy Approaching", file: "Toby Fox - Enemy Approaching.mp3" },
+    { title: "Fallen Down (Reprise)", file: "Toby Fox - Fallen Down (Reprise).mp3" },
+    { title: "Fallen Down", file: "Toby Fox - Fallen Down.mp3" },
+    { title: "Final Power", file: "Toby Fox - Final Power.mp3" },
+    { title: "Finale", file: "Toby Fox - Finale.mp3" },
+    { title: "For The Fans", file: "Toby Fox - For The Fans.mp3" },
+    { title: "Ghost Fight", file: "Toby Fox - Ghost Fight.mp3" },
+    { title: "Ghouliday", file: "Toby Fox - Ghouliday.mp3" },
+    { title: "Good Night", file: "Toby Fox - Good Night.mp3" },
+    { title: "Heartache", file: "Toby Fox - Heartache.mp3" },
+    { title: "Here We Are", file: "Toby Fox - Here We Are.mp3" },
+    { title: "His Theme", file: "Toby Fox - His Theme.mp3" },
+    { title: "Home (Music Box)", file: "Toby Fox - Home (Music Box).mp3" },
+    { title: "Home", file: "Toby Fox - Home.mp3" },
+    { title: "Hopes And Dreams", file: "Toby Fox - Hopes And Dreams.mp3" },
+    { title: "Hotel", file: "Toby Fox - Hotel.mp3" },
+    { title: "It'S Raining Somewhere Else", file: "Toby Fox - It's Raining Somewhere Else.mp3" },
+    { title: "It'S Showtime!", file: "Toby Fox - It's Showtime!.mp3" },
+    { title: "Last Episode!", file: "Toby Fox - Last Episode!.mp3" },
+    { title: "Last Goodbye", file: "Toby Fox - Last Goodbye.mp3" },
+    { title: "Live Report", file: "Toby Fox - Live Report.mp3" },
+    { title: "Long Elevator", file: "Toby Fox - Long Elevator.mp3" },
+    { title: "Megalovania", file: "Toby Fox - MEGALOVANIA.mp3" },
+    { title: "Memory", file: "Toby Fox - Memory.mp3" },
+    { title: "Menu (Full)", file: "Toby Fox - Menu (Full).mp3" },
+    { title: "Metal Crusher", file: "Toby Fox - Metal Crusher.mp3" },
+    { title: "Mysterious Place", file: "Toby Fox - Mysterious Place.mp3" },
+    { title: "Ngahhh!!", file: "Toby Fox - NGAHHH!!.mp3" },
+    { title: "Nyeh Heh Heh!", file: "Toby Fox - Nyeh Heh Heh!.mp3" },
+    { title: "Oh My...", file: "Toby Fox - Oh My....mp3" },
+    { title: "Oh! Dungeon", file: "Toby Fox - Oh! Dungeon.mp3" },
+    { title: "Oh! One True Love", file: "Toby Fox - Oh! One True Love.mp3" },
+    { title: "Once Upon A Time", file: "Toby Fox - Once Upon a Time.mp3" },
+    { title: "Ooo", file: "Toby Fox - Ooo.mp3" },
+    { title: "Pathetic House", file: "Toby Fox - Pathetic House.mp3" },
+    { title: "Power Of  Neo ", file: "Toby Fox - Power Of _NEO_.mp3" },
+    { title: "Premonition", file: "Toby Fox - Premonition.mp3" },
+    { title: "Quiet Water", file: "Toby Fox - Quiet Water.mp3" },
+    { title: "Respite", file: "Toby Fox - Respite.mp3" },
+    { title: "Reunited", file: "Toby Fox - Reunited.mp3" },
+    { title: "Ruins", file: "Toby Fox - Ruins.mp3" },
+    { title: "Run!", file: "Toby Fox - Run!.mp3" },
+    { title: "Sans.", file: "Toby Fox - sans..mp3" },
+    { title: "Save The World", file: "Toby Fox - SAVE The World.mp3" },
+    { title: "She'S Playing Piano", file: "Toby Fox - She's Playing Piano.mp3" },
+    { title: "Shop", file: "Toby Fox - Shop.mp3" },
+    { title: "Small Shock", file: "Toby Fox - Small Shock.mp3" },
+    { title: "Snowdin Town", file: "Toby Fox - Snowdin Town.mp3" },
+    { title: "Snowy", file: "Toby Fox - Snowy.mp3" },
+    { title: "Song That Might Play When You Fight Sans", file: "Toby Fox - Song That Might Play When You Fight Sans.mp3" },
+    { title: "Spear Of Justice", file: "Toby Fox - Spear of Justice.mp3" },
+    { title: "Spider Dance", file: "Toby Fox - Spider Dance.mp3" },
+    { title: "Spooktune", file: "Toby Fox - Spooktune.mp3" },
+    { title: "Spookwave", file: "Toby Fox - Spookwave.mp3" },
+    { title: "Start Menu", file: "Toby Fox - Start Menu.mp3" },
+    { title: "Stronger Monsters", file: "Toby Fox - Stronger Monsters.mp3" },
+    { title: "Tem Shop", file: "Toby Fox - Tem Shop.mp3" },
+    { title: "Temmie Village", file: "Toby Fox - Temmie Village.mp3" },
+    { title: "The Choice", file: "Toby Fox - The Choice.mp3" },
+    { title: "Thundersnail", file: "Toby Fox - Thundersnail.mp3" },
+    { title: "Undertale", file: "Toby Fox - Undertale.mp3" },
+    { title: "Undyne", file: "Toby Fox - Undyne.mp3" },
+    { title: "Unnecessary Tension", file: "Toby Fox - Unnecessary Tension.mp3" },
+    { title: "Uwa!! So Heats!!♫", file: "Toby Fox - Uwa!! So HEATS!!♫.mp3" },
+    { title: "Uwa!! So Holiday♫", file: "Toby Fox - Uwa!! So Holiday♫.mp3" },
+    { title: "Uwa!! So Temperate♫", file: "Toby Fox - Uwa!! So Temperate♫.mp3" },
+    { title: "Waterfall", file: "Toby Fox - Waterfall.mp3" },
+    { title: "Wrong Enemy ! ", file: "Toby Fox - Wrong Enemy !_.mp3" },
+    { title: "You Idiot", file: "Toby Fox - You Idiot.mp3" },
+    { title: "Your Best Friend", file: "Toby Fox - Your Best Friend.mp3" },
+    { title: "Your Best Nightmare", file: "Toby Fox - Your Best Nightmare.mp3" }
+];
+
+        const guessDurations = [3, 6, 9, 14, 21, 30]; 
+        const MAX_GUESSES = 6;
+        const MAX_DURATION = guessDurations[guessDurations.length - 1]; 
+
+        // --- GAME STATE ---
+        let currentSongIndex = -1;
+        let availableSongs = [...songLibrary];
+        let currentGuess = 0;
+        let isPlaying = false;
+        let isGameOver = false;
+        let searchMode = 'first'; // Can be 'first' or 'any'
+        let audio = new Audio();
+        let animationFrame;
+        let stats = { played: 0, won: 0 };
+
+        // DOM Elements
+        const playBtn = document.getElementById('play-btn');
+        const progressBar = document.getElementById('progress-bar');
+        const markersContainer = document.getElementById('markers');
+        const guessInput = document.getElementById('guess-input');
+        const sendBtn = document.getElementById('send-btn');
+        const skipBtn = document.getElementById('skip-btn');
+        const autocompleteList = document.getElementById('autocomplete-list');
+        const endModal = document.getElementById('end-modal');
+        const statsModal = document.getElementById('stats-modal');
+        const modeToggleBtn = document.getElementById('mode-toggle');
+
+        function initGame() {
+            if (availableSongs.length === 0) {
+                alert("No more songs! Showing stats.");
+                showStats();
+                return;
+            }
+
+            const randIndex = Math.floor(Math.random() * availableSongs.length);
+            const selectedSong = availableSongs[randIndex];
+            audio.src = selectedSong.file;
+            currentSongIndex = songLibrary.indexOf(selectedSong);
+            
+            availableSongs.splice(randIndex, 1);
+
+            currentGuess = 0;
+            isGameOver = false;
+            guessInput.value = '';
+            endModal.style.display = 'none';
+            playBtn.innerText = '▶';
+            progressBar.style.width = '0%';
+            
+            for(let i=0; i<MAX_GUESSES; i++) {
+                const box = document.getElementById(`guess-${i}`);
+                if (box) {
+                    box.innerText = '';
+                    box.style.borderColor = 'var(--border)';
+                    box.style.color = 'var(--text-color)';
+                }
+            }
+            
+            drawMarkers();
+        }
+
+        // --- SEARCH TOGGLE LOGIC ---
+        if (modeToggleBtn) {
+            modeToggleBtn.addEventListener('click', () => {
+                if (searchMode === 'first') {
+                    searchMode = 'any';
+                    modeToggleBtn.innerText = 'Search: Any Word';
+                } else {
+                    searchMode = 'first';
+                    modeToggleBtn.innerText = 'Search: First Word';
+                }
+                updateAutocomplete(); 
+            });
+        }
+
+        // Helper function to find matches based on the current mode
+        function getMatches(query) {
+            const searchStr = query.trim().toLowerCase();
+            
+            // FIXED: If the query is completely empty, return all songs!
+            if (searchStr === "") return songLibrary;
+            
+            return songLibrary.filter(s => {
+                const titleLower = s.title.toLowerCase();
+                if (searchMode === 'first') {
+                    return titleLower.startsWith(searchStr);
+                } else {
+                    return titleLower.startsWith(searchStr) || titleLower.includes(` ${searchStr}`);
+                }
+            });
+        }
+
+        // --- AUDIO LOGIC ---
+        if (playBtn) playBtn.addEventListener('click', toggleAudio);
+
+        function toggleAudio() {
+            if (isPlaying) {
+                audio.pause();
+                isPlaying = false;
+                playBtn.innerText = '▶';
+                cancelAnimationFrame(animationFrame);
+            } else {
+                isPlaying = true; 
+                audio.currentTime = 0; 
+                audio.play().catch(e => {
+                    isPlaying = false;
+                    alert("Audio file not found! Check your filenames.");
+                });
+                
+                if (isPlaying) {
+                    playBtn.innerText = '⏸';
+                    updateProgress(); 
+                }
+            }
+        }
+
+        audio.addEventListener('ended', () => {
+            isPlaying = false;
+            if (playBtn) playBtn.innerText = '▶';
+            cancelAnimationFrame(animationFrame);
+        });
+
+        function updateProgress() {
+            if (!isPlaying) return;
+            
+            const currentAllowedTime = isGameOver ? audio.duration : guessDurations[currentGuess];
+            
+            if (!isGameOver && audio.currentTime >= currentAllowedTime) {
+                audio.pause();
+                audio.currentTime = currentAllowedTime; 
+                isPlaying = false;
+                if (playBtn) playBtn.innerText = '▶';
+                return; 
+            }
+
+            const width = (audio.currentTime / MAX_DURATION) * 100;
+            if (progressBar) progressBar.style.width = `${Math.min(width, 100)}%`;
+
+            animationFrame = requestAnimationFrame(updateProgress);
+        }
+
+        function drawMarkers() {
+            if (!markersContainer) return;
+            markersContainer.innerHTML = '';
+            guessDurations.forEach(duration => {
+                const marker = document.createElement('div');
+                marker.className = 'marker';
+                marker.style.left = `${(duration / MAX_DURATION) * 100}%`;
+                markersContainer.appendChild(marker);
+            });
+        }
+
+        // --- AUTOCOMPLETE & GUESSING ---
+        if (guessInput) {
+            guessInput.addEventListener('focus', updateAutocomplete);
+            guessInput.addEventListener('input', updateAutocomplete);
+        }
+
+        function updateAutocomplete() {
+            if(isGameOver || !autocompleteList) return;
+            
+            const matches = getMatches(guessInput.value);
+            autocompleteList.innerHTML = '';
+            
+            if (matches.length > 0) {
+                autocompleteList.style.display = 'block';
+                matches.forEach(match => {
+                    const li = document.createElement('li');
+                    li.innerText = match.title;
+                    li.onclick = () => {
+                        guessInput.value = match.title;
+                        autocompleteList.style.display = 'none';
+                        submitGuess();
+                    };
+                    autocompleteList.appendChild(li);
+                });
+            } else {
+                autocompleteList.style.display = 'none';
+            }
+        }
+
+        document.addEventListener('click', (e) => {
+            if(e.target !== guessInput && autocompleteList) autocompleteList.style.display = 'none';
+        });
+
+        if (sendBtn) sendBtn.addEventListener('click', submitGuess);
+        if (skipBtn) skipBtn.addEventListener('click', () => submitGuess(true));
+        
+        if (guessInput) {
+            guessInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    const matches = getMatches(guessInput.value);
+                    if (matches.length === 1 && guessInput.value.trim() !== '') {
+                        guessInput.value = matches[0].title;
+                    }
+                    submitGuess();
+                    if (autocompleteList) autocompleteList.style.display = 'none';
+                }
+            });
+        }
+
+        function submitGuess(isSkip = false) {
+            if (isGameOver || currentGuess >= MAX_GUESSES) return;
+
+            const userGuess = guessInput.value.trim();
+            if (!isSkip && userGuess === "") return;
+
+            const correctTitle = songLibrary[currentSongIndex].title;
+            const box = document.getElementById(`guess-${currentGuess}`);
+            
+            if (box) {
+                if (isSkip) {
+                    box.innerText = "SKIPPED";
+                    box.style.color = '#888';
+                } else {
+                    box.innerText = userGuess;
+                    if (userGuess.toLowerCase() === correctTitle.toLowerCase()) {
+                        box.style.borderColor = 'var(--primary)';
+                        box.style.color = 'var(--primary)';
+                        endGame(true);
+                        return;
+                    } else {
+                        box.style.borderColor = 'var(--wrong)';
+                        box.style.color = 'var(--wrong)';
+                    }
+                }
+            }
+
+            currentGuess++;
+            guessInput.value = '';
+            
+            if (isPlaying) {
+                audio.pause();
+                isPlaying = false;
+                cancelAnimationFrame(animationFrame);
+            }
+            if (playBtn) playBtn.innerText = '▶';
+            if (progressBar) progressBar.style.width = '0%';
+
+            if (currentGuess >= MAX_GUESSES) {
+                endGame(false);
+            }
+        }
+
+        function endGame(won) {
+            isGameOver = true;
+            stats.played++;
+            if (won) stats.won++;
+
+            audio.currentTime = 0;
+
+            const title = document.getElementById('end-title');
+            if (title) {
+                title.innerText = won ? "You Got It!" : "Out of Guesses!";
+                title.style.color = won ? "var(--primary)" : "var(--wrong)";
+            }
+            
+            const songNameEl = document.getElementById('end-song-name');
+            if (songNameEl) songNameEl.innerText = songLibrary[currentSongIndex].title;
+            
+            if (endModal) endModal.style.display = 'flex';
+        }
+
+        const nextBtn = document.getElementById('next-btn');
+        const exitBtn = document.getElementById('exit-btn');
+        if (nextBtn) nextBtn.addEventListener('click', initGame);
+        if (exitBtn) exitBtn.addEventListener('click', showStats);
+
+        function showStats() {
+            if (endModal) endModal.style.display = 'none';
+            
+            const statPlayed = document.getElementById('stat-played');
+            const statWon = document.getElementById('stat-won');
+            const statPercent = document.getElementById('stat-percent');
+            
+            if (statPlayed) statPlayed.innerText = stats.played;
+            if (statWon) statWon.innerText = stats.won;
+            
+            const percent = stats.played === 0 ? 0 : Math.round((stats.won / stats.played) * 100);
+            if (statPercent) statPercent.innerText = percent;
+            
+            if (statsModal) statsModal.style.display = 'flex';
+        }
+
+        // Start the game!
+        initGame();
+    </script>
+</body>
+</html>
